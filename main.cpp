@@ -1,14 +1,14 @@
+// main.cpp
 #include <iostream>
 #include <fstream>
 #include <sstream>
 #include <vector>
 #include <string>
-#include <cstdlib>
-#include <cstdio>
-#include <ctime>
-#include "mcl.cpp" 
+#include <omp.h>
+#include "mcl.h"
 
 using namespace std;
+typedef long long lld;
 
 double** convert_to_double_array(const vector<vector<double>>& matrix, int n) {
     double** arr = new double*[n];
@@ -54,53 +54,43 @@ bool read_mtx(const string &filename, vector<vector<double>> &matrix, int &n) {
     }
 
     file.close();
+    std::cout << "  Loaded " << n << "×" << n << " matrix, starting MCL…\n";
+
     return true;
 }
 
 int main(int argc, char* argv[]) {
+    std::cout << "Loading matrix from: " << argv[1] << std::endl;
+
     if (argc != 2) {
-        cerr << "Usage: " << argv[0] << " <matrix_file.mtx>" << endl;
-        return EXIT_FAILURE;
+        cerr << "Usage: " << argv[0] << " <matrix_file.mtx>\n";
+        return 1;
     }
+    int n; vector<vector<double>> mat;
+    if (!read_mtx(argv[1], mat, n)) return 1;
+    double** a = convert_to_double_array(mat, n);
 
-    string filename = argv[1];
+    lld e = 2, r = 2;
+    double eps = 1e-6, eps2 = 1e-3;
 
-    vector<vector<double>> matrix;
-    int n;
+    // SERIAL run
+    double t0 = omp_get_wtime();
+    auto res_serial = mcl_serial(a, n, e, r, eps, eps2);
+    double t1 = omp_get_wtime();
+    printf("Serial MCL: %.6f s, %zu clusters\n",
+           t1 - t0, res_serial.size());
 
-    if (!read_mtx(filename, matrix, n)) {
-        return EXIT_FAILURE;
-    }
+    // PARALLEL run
+    double t2 = omp_get_wtime();        // <<< reset timer here
+    auto res_omp = mcl_openmp(a, n, e, r, eps, eps2);
+    double t3 = omp_get_wtime();
+    printf("OpenMP MCL: %.6f s, %zu clusters\n",
+           t3 - t2, res_omp.size());
 
-    double** matrix_arr = convert_to_double_array(matrix, n);
+    // … print clusters or compare results …
 
-    lld e = 2;  
-    lld r = 2;  
-    double eps = 1e-6; 
-    double eps2 = 1e-3;  
-
-    clock_t start_time = clock();
-
-    vector<vector<int>> result = mcl(matrix_arr, n, e, r, eps, eps2);
-
-    clock_t end_time = clock();
-
-    double elapsed_time = double(end_time - start_time) / CLOCKS_PER_SEC;
-    cout << "MCL executed in " << elapsed_time << " seconds." << endl;
-
-    cout << "MCL found " << result.size() << " clusters:" << endl;
-    for (size_t i = 0; i < result.size(); i++) {
-        cout << "{";
-        for (size_t j = 0; j < result[i].size(); j++) {
-            cout << result[i][j] << (j < result[i].size() - 1 ? ", " : "");
-        }
-        cout << "}" << endl;
-    }
-
-    for (int i = 0; i < n; ++i) {
-        delete[] matrix_arr[i];
-    }
-    delete[] matrix_arr;
-
+    // cleanup
+    for (int i = 0; i < n; ++i) delete[] a[i];
+    delete[] a;
     return 0;
 }

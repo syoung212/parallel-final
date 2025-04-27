@@ -16,6 +16,7 @@
 #include <set>
 #include <map>
 #include <complex>
+#include "mcl.h"
 
 using namespace std;
 typedef long long lld;
@@ -212,7 +213,7 @@ inline vector<vector<int> > build_clusters(double **a, int n, double eps)
     return ret;
 }
 
-inline vector<vector<int> > mcl(double **a, int n, lld e, lld r, double eps, double eps2)
+vector<vector<int> > mcl_serial(double **a, int n, lld e, lld r, double eps, double eps2)
 {
     double **m = normalise(a, n, eps);
     double **next_m = m;

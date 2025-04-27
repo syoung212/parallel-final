@@ -1,26 +1,22 @@
-CXX = g++
+CXX      = g++
 CXXFLAGS = -O3 -std=c++11 -Wall
+OMPFLAGS = -fopenmp
 
-SRC = main.cpp mcl.cpp
-OBJ = main.o mcl.o
-EXEC = mcl
+SRC      = main.cpp \
+           mcl_serial.cpp \
+           mcl_openmp.cpp
+OBJ      = $(SRC:.cpp=.o)
+EXEC     = mcl_all
 
 all: $(EXEC)
 
-main.o: main.cpp
-	$(CXX) $(CXXFLAGS) -c main.cpp -o main.o
-
-mcl.o: mcl.cpp
-	$(CXX) $(CXXFLAGS) -c mcl.cpp -o mcl.o
-
 $(EXEC): $(OBJ)
-	$(CXX) $(CXXFLAGS) $(OBJ) -o $(EXEC)
+	$(CXX) $(CXXFLAGS) $(OMPFLAGS) $^ -o $@
 
-run: $(EXEC)
-	@echo "Running with matrix file: $(matrix_file)"
-	@./$(EXEC) $(matrix_file)
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) $(if $(findstring openmp,$<),$(OMPFLAGS),) -c $< -o $@
 
 clean:
 	rm -f $(OBJ) $(EXEC)
 
-.PHONY: all run clean
+.PHONY: all clean
