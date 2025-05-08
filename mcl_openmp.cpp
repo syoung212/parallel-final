@@ -55,25 +55,180 @@ inline double** matrix_multiply(double **a, double **b, int n, int l, int m) {
         }
     } else {
         // Use parallel execution with cache optimization
-        #pragma omp parallel for schedule(dynamic, 16)
+        #pragma omp parallel for schedule(dynamic, 64)
         for (int i = 0; i < n; i++) {
             for (int k = 0; k < l; k++) {
                 double a_ik = a[i][k];
                 
-                // Process 4 elements at a time using AVX if available
                 int j = 0;
                 #ifdef __AVX__
+                // Precompute broadcast of a_ik
+                __m256d a_vec = _mm256_set1_pd(a_ik);
+                for (; j <= m - 64; j += 64) {
+                    // load b[ k ][ j + 0..63 ] and c[ i ][ j + 0..63 ]
+                    __m256d b0  = _mm256_loadu_pd(&b[k][j+ 0]);
+                    __m256d b1  = _mm256_loadu_pd(&b[k][j+ 4]);
+                    __m256d b2  = _mm256_loadu_pd(&b[k][j+ 8]);
+                    __m256d b3  = _mm256_loadu_pd(&b[k][j+12]);
+                    __m256d b4  = _mm256_loadu_pd(&b[k][j+16]);
+                    __m256d b5  = _mm256_loadu_pd(&b[k][j+20]);
+                    __m256d b6  = _mm256_loadu_pd(&b[k][j+24]);
+                    __m256d b7  = _mm256_loadu_pd(&b[k][j+28]);
+                    __m256d b8  = _mm256_loadu_pd(&b[k][j+32]);
+                    __m256d b9  = _mm256_loadu_pd(&b[k][j+36]);
+                    __m256d b10 = _mm256_loadu_pd(&b[k][j+40]);
+                    __m256d b11 = _mm256_loadu_pd(&b[k][j+44]);
+                    __m256d b12 = _mm256_loadu_pd(&b[k][j+48]);
+                    __m256d b13 = _mm256_loadu_pd(&b[k][j+52]);
+                    __m256d b14 = _mm256_loadu_pd(&b[k][j+56]);
+                    __m256d b15 = _mm256_loadu_pd(&b[k][j+60]);
+
+                    __m256d c0  = _mm256_loadu_pd(&c[i][j+ 0]);
+                    __m256d c1  = _mm256_loadu_pd(&c[i][j+ 4]);
+                    __m256d c2  = _mm256_loadu_pd(&c[i][j+ 8]);
+                    __m256d c3  = _mm256_loadu_pd(&c[i][j+12]);
+                    __m256d c4  = _mm256_loadu_pd(&c[i][j+16]);
+                    __m256d c5  = _mm256_loadu_pd(&c[i][j+20]);
+                    __m256d c6  = _mm256_loadu_pd(&c[i][j+24]);
+                    __m256d c7  = _mm256_loadu_pd(&c[i][j+28]);
+                    __m256d c8  = _mm256_loadu_pd(&c[i][j+32]);
+                    __m256d c9  = _mm256_loadu_pd(&c[i][j+36]);
+                    __m256d c10 = _mm256_loadu_pd(&c[i][j+40]);
+                    __m256d c11 = _mm256_loadu_pd(&c[i][j+44]);
+                    __m256d c12 = _mm256_loadu_pd(&c[i][j+48]);
+                    __m256d c13 = _mm256_loadu_pd(&c[i][j+52]);
+                    __m256d c14 = _mm256_loadu_pd(&c[i][j+56]);
+                    __m256d c15 = _mm256_loadu_pd(&c[i][j+60]);
+
+                    // FMA 16 vectors
+                    c0  = _mm256_fmadd_pd(a_vec, b0,  c0);
+                    c1  = _mm256_fmadd_pd(a_vec, b1,  c1);
+                    c2  = _mm256_fmadd_pd(a_vec, b2,  c2);
+                    c3  = _mm256_fmadd_pd(a_vec, b3,  c3);
+                    c4  = _mm256_fmadd_pd(a_vec, b4,  c4);
+                    c5  = _mm256_fmadd_pd(a_vec, b5,  c5);
+                    c6  = _mm256_fmadd_pd(a_vec, b6,  c6);
+                    c7  = _mm256_fmadd_pd(a_vec, b7,  c7);
+                    c8  = _mm256_fmadd_pd(a_vec, b8,  c8);
+                    c9  = _mm256_fmadd_pd(a_vec, b9,  c9);
+                    c10 = _mm256_fmadd_pd(a_vec, b10, c10);
+                    c11 = _mm256_fmadd_pd(a_vec, b11, c11);
+                    c12 = _mm256_fmadd_pd(a_vec, b12, c12);
+                    c13 = _mm256_fmadd_pd(a_vec, b13, c13);
+                    c14 = _mm256_fmadd_pd(a_vec, b14, c14);
+                    c15 = _mm256_fmadd_pd(a_vec, b15, c15);
+
+                    // store back
+                    _mm256_storeu_pd(&c[i][j+ 0],  c0);
+                    _mm256_storeu_pd(&c[i][j+ 4],  c1);
+                    _mm256_storeu_pd(&c[i][j+ 8],  c2);
+                    _mm256_storeu_pd(&c[i][j+12],  c3);
+                    _mm256_storeu_pd(&c[i][j+16],  c4);
+                    _mm256_storeu_pd(&c[i][j+20],  c5);
+                    _mm256_storeu_pd(&c[i][j+24],  c6);
+                    _mm256_storeu_pd(&c[i][j+28],  c7);
+                    _mm256_storeu_pd(&c[i][j+32],  c8);
+                    _mm256_storeu_pd(&c[i][j+36],  c9);
+                    _mm256_storeu_pd(&c[i][j+40],  c10);
+                    _mm256_storeu_pd(&c[i][j+44],  c11);
+                    _mm256_storeu_pd(&c[i][j+48],  c12);
+                    _mm256_storeu_pd(&c[i][j+52],  c13);
+                    _mm256_storeu_pd(&c[i][j+56],  c14);
+                    _mm256_storeu_pd(&c[i][j+60],  c15);
+                }
+
+                // --- Then unroll by 32 (8 vectors) ---
+                for (; j <= m - 32; j += 32) {
+                    __m256d b0 = _mm256_loadu_pd(&b[k][j+ 0]);
+                    __m256d b1 = _mm256_loadu_pd(&b[k][j+ 4]);
+                    __m256d b2 = _mm256_loadu_pd(&b[k][j+ 8]);
+                    __m256d b3 = _mm256_loadu_pd(&b[k][j+12]);
+                    __m256d b4 = _mm256_loadu_pd(&b[k][j+16]);
+                    __m256d b5 = _mm256_loadu_pd(&b[k][j+20]);
+                    __m256d b6 = _mm256_loadu_pd(&b[k][j+24]);
+                    __m256d b7 = _mm256_loadu_pd(&b[k][j+28]);
+
+                    __m256d c0 = _mm256_loadu_pd(&c[i][j+ 0]);
+                    __m256d c1 = _mm256_loadu_pd(&c[i][j+ 4]);
+                    __m256d c2 = _mm256_loadu_pd(&c[i][j+ 8]);
+                    __m256d c3 = _mm256_loadu_pd(&c[i][j+12]);
+                    __m256d c4 = _mm256_loadu_pd(&c[i][j+16]);
+                    __m256d c5 = _mm256_loadu_pd(&c[i][j+20]);
+                    __m256d c6 = _mm256_loadu_pd(&c[i][j+24]);
+                    __m256d c7 = _mm256_loadu_pd(&c[i][j+28]);
+
+                    c0 = _mm256_fmadd_pd(a_vec, b0, c0);
+                    c1 = _mm256_fmadd_pd(a_vec, b1, c1);
+                    c2 = _mm256_fmadd_pd(a_vec, b2, c2);
+                    c3 = _mm256_fmadd_pd(a_vec, b3, c3);
+                    c4 = _mm256_fmadd_pd(a_vec, b4, c4);
+                    c5 = _mm256_fmadd_pd(a_vec, b5, c5);
+                    c6 = _mm256_fmadd_pd(a_vec, b6, c6);
+                    c7 = _mm256_fmadd_pd(a_vec, b7, c7);
+
+                    _mm256_storeu_pd(&c[i][j+ 0], c0);
+                    _mm256_storeu_pd(&c[i][j+ 4], c1);
+                    _mm256_storeu_pd(&c[i][j+ 8], c2);
+                    _mm256_storeu_pd(&c[i][j+12], c3);
+                    _mm256_storeu_pd(&c[i][j+16], c4);
+                    _mm256_storeu_pd(&c[i][j+20], c5);
+                    _mm256_storeu_pd(&c[i][j+24], c6);
+                    _mm256_storeu_pd(&c[i][j+28], c7);
+                }
+                for (; j <= m - 16; j += 16) {
+                    // load 4 vectors of b
+                    __m256d b0 = _mm256_loadu_pd(&b[k][j +  0]);
+                    __m256d b1 = _mm256_loadu_pd(&b[k][j +  4]);
+                    __m256d b2 = _mm256_loadu_pd(&b[k][j +  8]);
+                    __m256d b3 = _mm256_loadu_pd(&b[k][j + 12]);
+
+                    // load corresponding c
+                    __m256d c0 = _mm256_loadu_pd(&c[i][j +  0]);
+                    __m256d c1 = _mm256_loadu_pd(&c[i][j +  4]);
+                    __m256d c2 = _mm256_loadu_pd(&c[i][j +  8]);
+                    __m256d c3 = _mm256_loadu_pd(&c[i][j + 12]);
+
+                    // compute
+                    c0 = _mm256_fmadd_pd(a_vec, b0, c0);
+                    c1 = _mm256_fmadd_pd(a_vec, b1, c1);
+                    c2 = _mm256_fmadd_pd(a_vec, b2, c2);
+                    c3 = _mm256_fmadd_pd(a_vec, b3, c3);
+
+                    // store back
+                    _mm256_storeu_pd(&c[i][j +  0], c0);
+                    _mm256_storeu_pd(&c[i][j +  4], c1);
+                    _mm256_storeu_pd(&c[i][j +  8], c2);
+                    _mm256_storeu_pd(&c[i][j + 12], c3);
+                }
+
+                for (; j <= m - 8; j += 8) {
+                    // load 4 vectors of b
+                    __m256d b0 = _mm256_loadu_pd(&b[k][j +  0]);
+                    __m256d b1 = _mm256_loadu_pd(&b[k][j +  4]);
+
+                    // load corresponding c
+                    __m256d c0 = _mm256_loadu_pd(&c[i][j +  0]);
+                    __m256d c1 = _mm256_loadu_pd(&c[i][j +  4]);
+
+                    // compute
+                    c0 = _mm256_fmadd_pd(a_vec, b0, c0);
+                    c1 = _mm256_fmadd_pd(a_vec, b1, c1);
+
+                    // store back
+                    _mm256_storeu_pd(&c[i][j +  0], c0);
+                    _mm256_storeu_pd(&c[i][j +  4], c1);
+                }
+
                 for (; j <= m - 4; j += 4) {
-                    __m256d b_vec = _mm256_loadu_pd(&b[k][j]);
-                    __m256d c_vec = _mm256_loadu_pd(&c[i][j]);
-                    __m256d a_vec = _mm256_set1_pd(a_ik);
-                    __m256d result = _mm256_add_pd(c_vec, _mm256_mul_pd(a_vec, b_vec));
-                    _mm256_storeu_pd(&c[i][j], result);
+                    __m256d b0 = _mm256_loadu_pd(&b[k][j]);
+                    __m256d c0 = _mm256_loadu_pd(&c[i][j]);
+                    c0 = _mm256_fmadd_pd(a_vec, b0, c0);
+                    _mm256_storeu_pd(&c[i][j], c0);
                 }
                 #endif
-                
-                // Process remaining elements
-                for (; j < m; j++) {
+
+                // Remainder loop
+                for (; j < m; ++j) {
                     c[i][j] += a_ik * b[k][j];
                 }
             }
