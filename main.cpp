@@ -121,7 +121,7 @@ int main(int argc, char* argv[]) {
     vector<int> sizes;
     vector<double> serial_times, omp_times, row_times;
 
-    vector<int> matrix_sizes = {5000};
+    vector<int> matrix_sizes = {250, 500, 750, 1000, 2000, 5000}; 
 
     for (int matrix_size : matrix_sizes) {
         stringstream filename;
