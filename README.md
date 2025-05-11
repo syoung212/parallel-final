@@ -52,3 +52,7 @@ While you could generate your own matrix, we’ve included several sample matric
 ```
 
 Replace `<preset_matrix_name>` with the file name of any test matrix.
+
+---
+
+**Source Code of the Base MCL Implementation**: https://github.com/PetarV-/Machine-Learning/blob/master/Clustering/Markov%20Clustering.cpp
