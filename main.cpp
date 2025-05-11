@@ -121,11 +121,11 @@ int main(int argc, char* argv[]) {
     vector<int> sizes;
     vector<double> serial_times, omp_times, row_times;
 
-    vector<int> matrix_sizes = {250, 500, 750, 1000, 2000, 5000}; 
+    vector<int> nodes = {250, 500, 750, 1000, 2000, 5000}; 
 
-    for (int matrix_size : matrix_sizes) {
+    for (int node : nodes) {
         stringstream filename;
-        filename << "./data/matrix_" << matrix_size << ".mtx"; 
+        filename << "./data/matrix_" << node << ".mtx"; 
         string matrix_file = filename.str();
 
         int n;
@@ -169,7 +169,7 @@ int main(int argc, char* argv[]) {
         // row_times.push_back(t5 - t4);
         // std::cout << "Row Pruning Optimized Time: " << t5 - t4 << " seconds" << std::endl;
 
-        sizes.push_back(matrix_size);
+        sizes.push_back(node);
 
         vector<int> serial_clusters = extract_clusters(res_serial);
         vector<int> omp_clusters = extract_clusters(res_omp);
@@ -179,7 +179,7 @@ int main(int argc, char* argv[]) {
         set<int> omp_set(omp_clusters.begin(), omp_clusters.end());
         set<int> row_set(row_clusters.begin(), row_clusters.end());
 
-        cout << "Matrix size: " << matrix_size << endl;
+        cout << "Node Count: " << node << endl;
         cout << "  Serial clusters:     " << serial_set.size() << endl;
         cout << "  Full Matrix Optimized clusters:     " << omp_set.size() << endl;
         cout << "  Row Pruning Optimized clusters: " << row_set.size() << endl;
