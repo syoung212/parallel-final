@@ -1,3 +1,15 @@
+// THERE ARE TWO VERSIONS OF THIS CODE. 
+
+// VERSION 1: LOOP UNROLLING + SIMD VECTORIZATION
+
+// VERSION 2: TILING 
+
+// TO RUN TILING (BETTER FOR LARGER MATRICES), RUN VERSION 2 (COMMENT OUT VERSION 1). 
+
+// BY DEFAULT, BELOW IS VERSION 1 
+
+
+// VERSION 1: LOOP UNROLLING + SIMD VECTORIZATION
 #include <stdio.h>
 #include <math.h>
 #include <iostream>
@@ -5,24 +17,22 @@
 #include <queue>
 #include <omp.h>
 #include <cstring>
-#include <immintrin.h> // For AVX/SSE instructions
+#include <immintrin.h> 
 #include "mcl.h"
 
 using namespace std;
 typedef long long lld;
 
-// Memory-aligned allocation for better SIMD performance
 inline double* aligned_alloc_double(size_t n) {
     void* ptr = nullptr;
     #ifdef _MSC_VER
-    ptr = _aligned_malloc(n * sizeof(double), 32); // 32-byte alignment for AVX
+    ptr = _aligned_malloc(n * sizeof(double), 32); 
     #else
     posix_memalign(&ptr, 32, n * sizeof(double));
     #endif
     return static_cast<double*>(ptr);
 }
 
-// Free aligned memory
 inline void aligned_free(void* ptr) {
     #ifdef _MSC_VER
     _aligned_free(ptr);
@@ -31,22 +41,18 @@ inline void aligned_free(void* ptr) {
     #endif
 }
 
-// Cache-optimized matrix multiplication using aligned memory and better loop ordering
+
 inline double** matrix_multiply(double **a, double **b, int n, int l, int m) {
-    // Allocate contiguous memory for better cache performance
     double **c = new double*[n];
     double *c_data = aligned_alloc_double(n * m);
-    memset(c_data, 0, n * m * sizeof(double)); // Zero-initialize
-    
+    memset(c_data, 0, n * m * sizeof(double));
     for (int i = 0; i < n; i++) {
         c[i] = c_data + i * m;
     }
     
-    // Use SIMD for larger matrices, threshold determined empirically
     if (n * l * m < 10000) {
-        // Small matrix optimization - avoid parallel overhead and use cache-friendly access
         for (int i = 0; i < n; i++) {
-            for (int k = 0; k < l; k++) {  // Swap j and k loops for better cache locality
+            for (int k = 0; k < l; k++) { 
                 double a_ik = a[i][k];
                 for (int j = 0; j < m; j++) {
                     c[i][j] += a_ik * b[k][j];
@@ -54,18 +60,14 @@ inline double** matrix_multiply(double **a, double **b, int n, int l, int m) {
             }
         }
     } else {
-        // Use parallel execution with cache optimization
         #pragma omp parallel for schedule(dynamic, 64)
         for (int i = 0; i < n; i++) {
             for (int k = 0; k < l; k++) {
                 double a_ik = a[i][k];
-                
                 int j = 0;
                 #ifdef __AVX__
-                // Precompute broadcast of a_ik
                 __m256d a_vec = _mm256_set1_pd(a_ik);
                 for (; j <= m - 64; j += 64) {
-                    // load b[ k ][ j + 0..63 ] and c[ i ][ j + 0..63 ]
                     __m256d b0  = _mm256_loadu_pd(&b[k][j+ 0]);
                     __m256d b1  = _mm256_loadu_pd(&b[k][j+ 4]);
                     __m256d b2  = _mm256_loadu_pd(&b[k][j+ 8]);
@@ -100,7 +102,6 @@ inline double** matrix_multiply(double **a, double **b, int n, int l, int m) {
                     __m256d c14 = _mm256_loadu_pd(&c[i][j+56]);
                     __m256d c15 = _mm256_loadu_pd(&c[i][j+60]);
 
-                    // FMA 16 vectors
                     c0  = _mm256_fmadd_pd(a_vec, b0,  c0);
                     c1  = _mm256_fmadd_pd(a_vec, b1,  c1);
                     c2  = _mm256_fmadd_pd(a_vec, b2,  c2);
@@ -118,7 +119,6 @@ inline double** matrix_multiply(double **a, double **b, int n, int l, int m) {
                     c14 = _mm256_fmadd_pd(a_vec, b14, c14);
                     c15 = _mm256_fmadd_pd(a_vec, b15, c15);
 
-                    // store back
                     _mm256_storeu_pd(&c[i][j+ 0],  c0);
                     _mm256_storeu_pd(&c[i][j+ 4],  c1);
                     _mm256_storeu_pd(&c[i][j+ 8],  c2);
@@ -136,8 +136,6 @@ inline double** matrix_multiply(double **a, double **b, int n, int l, int m) {
                     _mm256_storeu_pd(&c[i][j+56],  c14);
                     _mm256_storeu_pd(&c[i][j+60],  c15);
                 }
-
-                // --- Then unroll by 32 (8 vectors) ---
                 for (; j <= m - 32; j += 32) {
                     __m256d b0 = _mm256_loadu_pd(&b[k][j+ 0]);
                     __m256d b1 = _mm256_loadu_pd(&b[k][j+ 4]);
@@ -176,25 +174,21 @@ inline double** matrix_multiply(double **a, double **b, int n, int l, int m) {
                     _mm256_storeu_pd(&c[i][j+28], c7);
                 }
                 for (; j <= m - 16; j += 16) {
-                    // load 4 vectors of b
                     __m256d b0 = _mm256_loadu_pd(&b[k][j +  0]);
                     __m256d b1 = _mm256_loadu_pd(&b[k][j +  4]);
                     __m256d b2 = _mm256_loadu_pd(&b[k][j +  8]);
                     __m256d b3 = _mm256_loadu_pd(&b[k][j + 12]);
 
-                    // load corresponding c
                     __m256d c0 = _mm256_loadu_pd(&c[i][j +  0]);
                     __m256d c1 = _mm256_loadu_pd(&c[i][j +  4]);
                     __m256d c2 = _mm256_loadu_pd(&c[i][j +  8]);
                     __m256d c3 = _mm256_loadu_pd(&c[i][j + 12]);
 
-                    // compute
                     c0 = _mm256_fmadd_pd(a_vec, b0, c0);
                     c1 = _mm256_fmadd_pd(a_vec, b1, c1);
                     c2 = _mm256_fmadd_pd(a_vec, b2, c2);
                     c3 = _mm256_fmadd_pd(a_vec, b3, c3);
 
-                    // store back
                     _mm256_storeu_pd(&c[i][j +  0], c0);
                     _mm256_storeu_pd(&c[i][j +  4], c1);
                     _mm256_storeu_pd(&c[i][j +  8], c2);
@@ -202,19 +196,13 @@ inline double** matrix_multiply(double **a, double **b, int n, int l, int m) {
                 }
 
                 for (; j <= m - 8; j += 8) {
-                    // load 4 vectors of b
                     __m256d b0 = _mm256_loadu_pd(&b[k][j +  0]);
                     __m256d b1 = _mm256_loadu_pd(&b[k][j +  4]);
-
-                    // load corresponding c
                     __m256d c0 = _mm256_loadu_pd(&c[i][j +  0]);
                     __m256d c1 = _mm256_loadu_pd(&c[i][j +  4]);
 
-                    // compute
                     c0 = _mm256_fmadd_pd(a_vec, b0, c0);
                     c1 = _mm256_fmadd_pd(a_vec, b1, c1);
-
-                    // store back
                     _mm256_storeu_pd(&c[i][j +  0], c0);
                     _mm256_storeu_pd(&c[i][j +  4], c1);
                 }
@@ -227,7 +215,6 @@ inline double** matrix_multiply(double **a, double **b, int n, int l, int m) {
                 }
                 #endif
 
-                // Remainder loop
                 for (; j < m; ++j) {
                     c[i][j] += a_ik * b[k][j];
                 }
@@ -237,7 +224,6 @@ inline double** matrix_multiply(double **a, double **b, int n, int l, int m) {
     return c;
 }
 
-// Fast exponentiation with bit manipulation - already efficient
 inline double fast_pow(double num, lld pow) {
     double ret = 1.0;
     while (pow) {
@@ -248,11 +234,9 @@ inline double fast_pow(double num, lld pow) {
     return ret;
 }
 
-// Free a matrix properly with support for contiguous allocation
 inline void free_matrix(double **matrix, int n) {
     if (matrix) {
         if (matrix[0]) {
-            // Check if this is a contiguous allocation
             double* first_row_ptr = matrix[0];
             bool is_contiguous = true;
             for (int i = 1; i < n && is_contiguous; i++) {
@@ -273,19 +257,17 @@ inline void free_matrix(double **matrix, int n) {
     }
 }
 
-// Matrix exponentiation with optimized memory management
+
 inline double** expand(double **a, int n, lld e) {
-    // Identity matrix with contiguous memory allocation
     double **ret = new double*[n];
     double *ret_data = aligned_alloc_double(n * n);
-    memset(ret_data, 0, n * n * sizeof(double)); // Zero-initialize
+    memset(ret_data, 0, n * n * sizeof(double)); 
     
     for (int i = 0; i < n; i++) {
         ret[i] = ret_data + i * n;
-        ret[i][i] = 1.0;  // Set diagonal to 1
+        ret[i][i] = 1.0; 
     }
     
-    // Create a copy of input matrix
     double **base = new double*[n];
     double *base_data = aligned_alloc_double(n * n);
     
@@ -310,21 +292,17 @@ inline double** expand(double **a, int n, lld e) {
     return ret;
 }
 
-// Sparse matrix inflation optimization - skips zeros and uses SIMD
 inline void inflate(double **a, int n, lld r, double eps) {
-    // First pass - find non-zero values and apply exponentiation
+
     #pragma omp parallel for schedule(dynamic, 32)
     for (int i = 0; i < n; i++) {
-        // Count non-zeros to optimize memory access
         int nonzeros = 0;
         for (int j = 0; j < n; j++) {
             if (a[i][j] > eps) nonzeros++;
         }
         
-        // Sparse optimization - for rows with few non-zeros
-        if (nonzeros < n/4) {  // If row is sparse (< 25% non-zero)
+        if (nonzeros < n/4) { 
             double sum = 0.0;
-            // Process only non-zero elements
             for (int j = 0; j < n; j++) {
                 if (a[i][j] > eps) {
                     a[i][j] = fast_pow(a[i][j], r);
@@ -334,7 +312,6 @@ inline void inflate(double **a, int n, lld r, double eps) {
                 }
             }
             
-            // Normalization
             if (sum > 0) {
                 double inv_sum = 1.0 / sum;
                 for (int j = 0; j < n; j++) {
@@ -345,19 +322,15 @@ inline void inflate(double **a, int n, lld r, double eps) {
                 }
             }
         } else {
-            // Dense row optimization with vectorization
             double sum = 0.0;
             int j = 0;
             
             #ifdef __AVX__
             __m256d eps_vec = _mm256_set1_pd(eps);
             __m256d zeros = _mm256_setzero_pd();
-            
             for (; j <= n - 4; j += 4) {
                 __m256d values = _mm256_loadu_pd(&a[i][j]);
                 __m256d mask = _mm256_cmp_pd(values, eps_vec, _CMP_GT_OQ);
-                
-                // Calculate powers only for values > eps
                 for (int idx = 0; idx < 4; idx++) {
                     double val = ((double*)&values)[idx];
                     if (val > eps) {
@@ -367,13 +340,10 @@ inline void inflate(double **a, int n, lld r, double eps) {
                         ((double*)&values)[idx] = 0.0;
                     }
                 }
-                
-                // Store results
                 _mm256_storeu_pd(&a[i][j], values);
             }
             #endif
-            
-            // Process remaining elements
+
             for (; j < n; j++) {
                 if (a[i][j] > eps) {
                     a[i][j] = fast_pow(a[i][j], r);
@@ -383,7 +353,6 @@ inline void inflate(double **a, int n, lld r, double eps) {
                 }
             }
             
-            // Normalization with vectorization
             if (sum > 0) {
                 double inv_sum = 1.0 / sum;
                 j = 0;
@@ -394,16 +363,12 @@ inline void inflate(double **a, int n, lld r, double eps) {
                 for (; j <= n - 4; j += 4) {
                     __m256d values = _mm256_loadu_pd(&a[i][j]);
                     values = _mm256_mul_pd(values, inv_sum_vec);
-                    
-                    // Set small values to zero
                     __m256d mask = _mm256_cmp_pd(values, eps_vec, _CMP_LE_OQ);
                     values = _mm256_blendv_pd(values, zeros, mask);
-                    
                     _mm256_storeu_pd(&a[i][j], values);
                 }
                 #endif
-                
-                // Process remaining elements
+
                 for (; j < n; j++) {
                     if (a[i][j] > 0) {
                         a[i][j] *= inv_sum;
@@ -415,11 +380,10 @@ inline void inflate(double **a, int n, lld r, double eps) {
     }
 }
 
-// Optimized normalization with contiguous memory and vectorization
 inline double** normalise(double **a, int n, double eps) {
     double **ret = new double*[n];
     double *ret_data = aligned_alloc_double(n * n);
-    memset(ret_data, 0, n * n * sizeof(double)); // Zero-initialize
+    memset(ret_data, 0, n * n * sizeof(double)); 
     
     for (int i = 0; i < n; i++) {
         ret[i] = ret_data + i * n;
@@ -429,7 +393,6 @@ inline double** normalise(double **a, int n, double eps) {
     for (int i = 0; i < n; i++) {
         double sum = 0.0;
         
-        // First pass: collect non-zero elements and sum
         for (int j = 0; j < n; j++) {
             if (a[i][j] > eps) {
                 ret[i][j] = a[i][j];
@@ -437,7 +400,6 @@ inline double** normalise(double **a, int n, double eps) {
             }
         }
         
-        // Second pass: normalize if sum > 0
         if (sum > 0) {
             double inv_sum = 1.0 / sum;
             int j = 0;
@@ -450,12 +412,11 @@ inline double** normalise(double **a, int n, double eps) {
                 __m256d values = _mm256_loadu_pd(&ret[i][j]);
                 __m256d mask = _mm256_cmp_pd(values, zeros, _CMP_GT_OQ);
                 __m256d result = _mm256_mul_pd(values, inv_sum_vec);
-                result = _mm256_and_pd(result, mask); // Zero out elements that were already 0
+                result = _mm256_and_pd(result, mask); 
                 _mm256_storeu_pd(&ret[i][j], result);
             }
             #endif
-            
-            // Process remaining elements
+
             for (; j < n; j++) {
                 if (ret[i][j] > 0) {
                     ret[i][j] *= inv_sum;
@@ -466,7 +427,6 @@ inline double** normalise(double **a, int n, double eps) {
     return ret;
 }
 
-// Calculate squared difference between matrices with vectorization
 inline double sq_diff(double **a, double **b, int n) {
     double ret = 0.0;
     
@@ -488,13 +448,11 @@ inline double sq_diff(double **a, double **b, int n) {
                 sum_vec = _mm256_add_pd(sum_vec, _mm256_mul_pd(diff, diff));
             }
             
-            // Extract sum from vector
             double partial_sum[4];
             _mm256_storeu_pd(partial_sum, sum_vec);
             local_sum += partial_sum[0] + partial_sum[1] + partial_sum[2] + partial_sum[3];
             #endif
-            
-            // Process remaining elements
+
             for (; j < n; j++) {
                 double d = a[i][j] - b[i][j];
                 local_sum += d * d;
@@ -507,7 +465,7 @@ inline double sq_diff(double **a, double **b, int n) {
     return ret;
 }
 
-// Helper function to get connected component (unchanged)
+
 inline vector<int> get_component(int start, vector<vector<int>> &graph, vector<char> &mark) {
     vector<int> comp;
     queue<int> q;
@@ -526,12 +484,9 @@ inline vector<int> get_component(int start, vector<vector<int>> &graph, vector<c
     return comp;
 }
 
-// Optimized cluster building with sparse graph representation
 inline vector<vector<int>> build_clusters(double **a, int n, double eps) {
     vector<char> mark(n, 0);
     vector<vector<int>> graph(n);
-    
-    // Count non-zeros to determine sparsity
     int total_edges = 0;
     #pragma omp parallel for reduction(+:total_edges)
     for (int i = 0; i < n; ++i) {
@@ -541,14 +496,11 @@ inline vector<vector<int>> build_clusters(double **a, int n, double eps) {
             }
         }
     }
-    
-    // Pre-allocate memory based on estimated size
     #pragma omp parallel for
     for (int i = 0; i < n; ++i) {
         graph[i].reserve(total_edges / n + 1);
     }
-    
-    // Build adjacency list with thread-local buffers to reduce contention
+
     const int num_threads = omp_get_max_threads();
     vector<vector<vector<int>>> thread_local_graphs(num_threads, vector<vector<int>>(n));
     
@@ -565,8 +517,7 @@ inline vector<vector<int>> build_clusters(double **a, int n, double eps) {
             }
         }
     }
-    
-    // Merge thread-local results
+
     for (int t = 0; t < num_threads; ++t) {
         for (int i = 0; i < n; ++i) {
             if (!thread_local_graphs[t][i].empty()) {
@@ -577,7 +528,6 @@ inline vector<vector<int>> build_clusters(double **a, int n, double eps) {
         }
     }
     
-    // Find connected components
     vector<vector<int>> clusters;
     for (int i = 0; i < n; ++i) {
         if (!mark[i]) {
@@ -587,31 +537,21 @@ inline vector<vector<int>> build_clusters(double **a, int n, double eps) {
     return clusters;
 }
 
-// Main MCL algorithm with optimizations for both small and large matrices
 vector<vector<int>> mcl_openmp(double **a, int n, lld e, lld r, double eps, double eps2) {
-    // Dynamic thread adjustment based on matrix size and system
     int max_threads = omp_get_max_threads();
     int ideal_threads = min(max_threads, max(1, (n * n) / 10000));
     omp_set_num_threads(ideal_threads);
-    
-    // Normalize input matrix
+
     double **m = normalise(a, n, eps);
     double **next_m;
     double diff;
     int iterations = 0;
-    const int max_iterations = 100; // Prevent infinite loops
+    const int max_iterations = 100; 
     
     do {
-        // Expansion step
         next_m = expand(m, n, e);
-        
-        // Inflation step
         inflate(next_m, n, r, eps);
-        
-        // Check convergence
         diff = sq_diff(m, next_m, n);
-        
-        // Clean up and prepare for next iteration
         free_matrix(m, n);
         m = next_m;
         
@@ -620,11 +560,11 @@ vector<vector<int>> mcl_openmp(double **a, int n, lld e, lld r, double eps, doub
         
     } while (diff > eps2);
     
-    // Build clusters
     vector<vector<int>> clusters = build_clusters(m, n, eps);
-    
-    // Clean up
     free_matrix(m, n);
     
     return clusters;
 }
+
+
+// VERSION 2: LOOP UNROLLING + SIMD VECTORIZATION
