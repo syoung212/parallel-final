@@ -4,7 +4,8 @@ OMPFLAGS = -fopenmp
 
 SRC      = main.cpp \
            mcl_serial.cpp \
-           mcl_openmp.cpp
+           mcl_openmp.cpp \
+		   mcl_row.cpp
 OBJ      = $(SRC:.cpp=.o)
 EXEC     = mcl_all
 
